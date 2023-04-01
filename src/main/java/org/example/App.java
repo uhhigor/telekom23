@@ -13,12 +13,12 @@ public class App
                 (short) 0xB42,
                 (short) 0x731,
         };
-        short vector = (short) 0xA7;
+        short vector = (short) 0xA6;
         System.out.println(Integer.toBinaryString(vector));
         singleByteErrorMessage singleByteErrorMessage = new singleByteErrorMessage();
         vector = singleByteErrorMessage.encoding(H, vector);
         System.out.println(Integer.toBinaryString(vector));
-        vector = (short) 0xAF3;
+        vector = (short) 0xA76;
         System.out.println(Integer.toBinaryString(vector));
         singleByteErrorMessage.decoding(H, vector);
         System.out.println(Integer.toBinaryString(singleByteErrorMessage.decoding(H, vector)));

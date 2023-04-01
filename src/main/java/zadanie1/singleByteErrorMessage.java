@@ -22,15 +22,15 @@ public class singleByteErrorMessage {
               parityBits |= 0x1 << (3 - rows);
            }
        }
+       //System.out.println(Integer.toBinaryString(parityBits));
        codeWord = (short) (message << 4 | parityBits);
        return codeWord;
    }
 
     public short decoding(short[] matrix, short codeWord) {
-       short result = (short) ((codeWord >> 4) & 0xFF);
        short errorMatrix = errorMatrix(matrix, codeWord);
-
-       return result;
+       short result = correctMatrix(codeWord, errorMatrix);
+       return (short) ((result >> 4) & 0xFF);
     }
 
     public short errorMatrix(short [] matrix, short codeWord) {
@@ -42,12 +42,28 @@ public class singleByteErrorMessage {
            }
            int isEven = countSetBits % 2;
            if (isEven != 0) {
-               errorVector |= 0x1 << (3 - i);
+               //System.out.println(i);
+               errorVector |= 1 << (3 - i);
                //System.out.println(Integer.toBinaryString(errorVector));
            }
        }
        return errorVector;
     }
+
+    short correctMatrix(short codeWord, short errorMatrix) { //?
+       boolean errorDetection = false;
+       for (int j = 0; j < 12; j++) {
+           for (int i = 0; i < 4; i++) {
+               errorDetection = (errorMatrix >> (3 - i) & 1) == (H[i] >> (11 - j) & 1);
+           }
+           if(errorDetection) {
+               codeWord ^= 1 >> (11 - j); //?
+           }
+       }
+       return codeWord;
+    }
+
+
 
     /*private final short[] H = new short[] {
             (short) 0xF080, // 1 1 1 1 0 0 0 0 | 1 0 0 0 0 0 0 0

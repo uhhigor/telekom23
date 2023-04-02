@@ -6,7 +6,7 @@ public class App
 {
     public static void main( String[] args )
     {
-        byte message = (byte) 0xC1; //11000000
+        byte message = (byte) 0xC1; //11000001
         System.out.println("Wiadomość do przesłania: " + Integer.toBinaryString(0xFF & message));
 
         short encodedMessage = byteMessage.encode(message);

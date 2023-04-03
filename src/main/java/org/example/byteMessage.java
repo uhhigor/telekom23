@@ -1,4 +1,4 @@
-package zadanie1;
+package org.example;
 
 public class byteMessage {
 

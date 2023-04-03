@@ -1,12 +1,37 @@
 package org.example;
 
-import zadanie1.byteMessage;
+import java.io.*;
+import java.nio.ByteBuffer;
 
 public class App 
 {
+    static Console c;
     public static void main( String[] args )
     {
-        byte message = (byte) 0xC1; //11000001
+        System.out.println("1 ) Zakoduj plik");
+        System.out.println("2 ) Odkoduj plik");
+        System.out.println("3 ) Zakończ");
+
+        c = System.console();
+        if (c == null) {
+            System.out.println("Brak konsoli");
+            return;
+        }
+
+            String choose = c.readLine();
+            switch (choose) {
+                case "1" -> {
+                    System.out.println("Podaj ścieżkę do pliku: ");
+                    encodeFile(c.readLine());
+                }
+                case "2" -> {
+                    System.out.println("Podaj ścieżkę do pliku: ");
+                    decodeFile(c.readLine());
+                }
+                default -> {
+                }
+        }
+        /*byte message = (byte) 0xC1; //11000001
         System.out.println("Wiadomość do przesłania: " + Integer.toBinaryString(0xFF & message));
 
         short encodedMessage = byteMessage.encode(message);
@@ -27,6 +52,58 @@ public class App
         byte decodedMessage = byteMessage.decode(encodedMessage);
         System.out.println("Wiadomość odebrana i poprawiona: " + Integer.toBinaryString(0xFF & decodedMessage));
 
+*/
+    }
 
+    private static void encodeFile(String fileUrl) {
+        byte[] fileBytes;
+        try (FileInputStream inputStream = new FileInputStream(fileUrl)) {
+            fileBytes = inputStream.readAllBytes();
+        } catch (IOException e) {
+            System.out.println("Błąd podczas odczytu pliku.");
+            return;
+        }
+
+        short[] encodedFileShorts = new short[fileBytes.length];
+        for(int i = 0; i < fileBytes.length; i++)
+            encodedFileShorts[i] = byteMessage.encode(fileBytes[i]);
+
+        byte[] encodedFileBytes = new byte[encodedFileShorts.length * 2];
+        ByteBuffer buffer = ByteBuffer.wrap(encodedFileBytes);
+
+        for (short value : encodedFileShorts)
+            buffer.putShort(value);
+
+        try (FileOutputStream outputStream = new FileOutputStream(fileUrl)) {
+            outputStream.write(encodedFileBytes);
+        } catch (IOException e) {
+            System.out.println("Błąd podczas zapisu pliku.");
+        }
+    }
+
+    private static void decodeFile(String fileUrl) {
+        byte[] encodedFileBytes;
+        try (FileInputStream inputStream = new FileInputStream(fileUrl)) {
+            encodedFileBytes = inputStream.readAllBytes();
+        } catch (IOException e) {
+            System.out.println("Błąd podczas odczytu pliku.");
+            return;
+        }
+
+        short[] encodedFileShorts = new short[encodedFileBytes.length / 2];
+        ByteBuffer buffer = ByteBuffer.wrap(encodedFileBytes);
+
+        for (int i = 0; i < encodedFileShorts.length; i++)
+            encodedFileShorts[i] = buffer.getShort();
+
+        byte[] decodedFileBytes = new byte[encodedFileShorts.length];
+        for(int i = 0; i < encodedFileBytes.length; i++)
+            decodedFileBytes[i] = byteMessage.decode(encodedFileShorts[i]);
+
+        try (FileOutputStream outputStream = new FileOutputStream(fileUrl)) {
+            outputStream.write(decodedFileBytes);
+        } catch (IOException e) {
+            System.out.println("Błąd podczas zapisu pliku.");
+        }
     }
 }

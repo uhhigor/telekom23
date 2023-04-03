@@ -42,9 +42,11 @@ public class byteMessage {
         byte message = (byte) (encodedMessage >> 8);
         byte error = errorVector(encodedMessage);
 
-        if(error != 0)
+        if(error != 0) {
+            System.out.println("ERROR");
             //message = correctSingleError(message, error);
             message = correctDoubleError(message, error);
+        }
 
         return message;
     }

@@ -97,7 +97,7 @@ public class App
             encodedFileShorts[i] = buffer.getShort();
 
         byte[] decodedFileBytes = new byte[encodedFileShorts.length];
-        for(int i = 0; i < encodedFileBytes.length; i++)
+        for(int i = 0; i < decodedFileBytes.length; i++)
             decodedFileBytes[i] = byteMessage.decode(encodedFileShorts[i]);
 
         try (FileOutputStream outputStream = new FileOutputStream(fileUrl)) {

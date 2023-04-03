@@ -35,18 +35,16 @@ public class byteMessage {
             if (sum % 2 != 0)
                 parityBits |= (1 << (7 - mRow));
         }
-        return (short) ((message << 8) | parityBits);
+        return (short) ((message << 8) | (parityBits & 0xFF));
     }
 
     public static byte decode(short encodedMessage) {
         byte message = (byte) (encodedMessage >> 8);
         byte error = errorVector(encodedMessage);
 
-        if(error != 0) {
-            System.out.println("ERROR");
+        if(error != 0)
             //message = correctSingleError(message, error);
             message = correctDoubleError(message, error);
-        }
 
         return message;
     }

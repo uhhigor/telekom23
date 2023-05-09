@@ -2,6 +2,11 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+/zad1 - korekcja transmisji/.idea
+/zad2 - Xmodem/.idea
+/zad1 - korekcja transmisji/target
+zad2 - Xmodem/target
+/.idea
 
 ### IntelliJ IDEA ###
 .idea/modules.xml

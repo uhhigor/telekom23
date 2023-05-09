@@ -4,24 +4,21 @@ import java.io.*;
 
 public class XModemSender {
 
-    // STX, SOH, EOT and ACK characters
-    private static final byte STX = 0x02;
-    private static final byte SOH = 0x01;
-    private static final byte EOT = 0x04;
-    private static final byte ACK = 0x06;
+    // XModem control characters
+    private static final byte SOH = 0x01; // Start Of Header
+    private static final byte EOT = 0x04; // End Of Transmission
+    private static final byte ACK = 0x06; // Acknowledge
+    private static final byte NAK = 0x15; // Negative Acknowledge
 
     // XModem packet size
     private static final int PACKET_SIZE = 128;
 
-    // Wait time for ACK response in milliseconds
-    private static final int ACK_TIMEOUT = 1000;
-
-    // XModem packet number
-    private byte packetNumber = 1;
+    // Response timeout in milliseconds
+    public static final int RESPONSE_TIMEOUT = 10000;
 
     // Input and output streams
-    private InputStream inputStream;
-    private OutputStream outputStream;
+    private final InputStream inputStream;
+    private final OutputStream outputStream;
 
     public XModemSender(InputStream inputStream, OutputStream outputStream) {
         this.inputStream = inputStream;
@@ -29,75 +26,114 @@ public class XModemSender {
     }
 
     public void sendFile(String fileName) throws IOException {
+        // Open file for reading
         File file = new File(fileName);
         FileInputStream fileInputStream = new FileInputStream(file);
 
-        // Send file name
-        sendPacket(file.getName().getBytes());
-
-        // Send file size
-        sendPacket(String.valueOf(file.length()).getBytes());
+        // Wait for NAK from receiver
+        boolean nakReceived = false;
+        long startTime = System.currentTimeMillis();
+        while (System.currentTimeMillis() - startTime < 60000) {
+            if (inputStream.available() > 0) {
+                int b = inputStream.read();
+                if (b == NAK) {
+                    nakReceived = true;
+                    break;
+                }
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        if (!nakReceived) {
+            throw new IOException("Timeout waiting for NAK response from receiver");
+        }
 
         // Send file contents
-        byte[] buffer = new byte[PACKET_SIZE];
-        int bytesRead = 0;
+        int blockNumber = 1;
+        byte[] packetData = new byte[PACKET_SIZE];
+        int bytesRead;
+        while ((bytesRead = fileInputStream.read(packetData)) != -1) {
+            // Send packet
+            sendPacket(packetData, bytesRead, blockNumber);
 
-        while ((bytesRead = fileInputStream.read(buffer)) > 0) {
-            sendPacket(buffer, bytesRead);
-        }
+            // Increment block number
+            blockNumber++;
 
-        // Send end of transmission
-        sendPacket(new byte[] { EOT });
-
-        fileInputStream.close();
-    }
-
-    private void sendPacket(byte[] data) throws IOException {
-        sendPacket(data, data.length);
-    }
-
-    private void sendPacket(byte[] data, int length) throws IOException {
-        byte[] packet = new byte[PACKET_SIZE + 4];
-
-        if (length == PACKET_SIZE) {
-            packet[0] = STX;
-        } else {
-            packet[0] = SOH;
-        }
-
-        packet[1] = packetNumber;
-        packet[2] = (byte) (~packetNumber);
-
-        System.arraycopy(data, 0, packet, 3, length);
-
-        byte checksum = 0;
-        for (int i = 3; i < PACKET_SIZE + 3; i++) {
-            checksum += packet[i];
-        }
-        packet[PACKET_SIZE + 3] = checksum;
-
-        boolean ackReceived = false;
-        while (!ackReceived) {
-            outputStream.write(packet);
-            outputStream.flush();
-
-            byte[] response = new byte[1];
-            long startTime = System.currentTimeMillis();
-
-            while (System.currentTimeMillis() - startTime < ACK_TIMEOUT) {
+            // Wait for ACK or NAK response
+            boolean ackReceived = false;
+            boolean nakReceivedAgain = false;
+            startTime = System.currentTimeMillis();
+            while (System.currentTimeMillis() - startTime < RESPONSE_TIMEOUT) {
                 if (inputStream.available() > 0) {
-                    inputStream.read(response);
-                    if (response[0] == ACK) {
+                    int b = inputStream.read();
+                    if (b == ACK) {
                         ackReceived = true;
-                        packetNumber++;
+                        break;
+                    } else if (b == NAK) {
+                        nakReceivedAgain = true;
                         break;
                     }
                 }
             }
-
             if (!ackReceived) {
-                // Resend packet
+                if (nakReceivedAgain) {
+                    // Resend packet
+                    blockNumber--;
+                } else {
+                    throw new IOException("Timeout waiting for ACK/NAK response from receiver");
+                }
             }
         }
+
+        // Send EOT
+        sendEOT();
+
+        // Wait for ACK response
+        boolean eotAckReceived = false;
+        startTime = System.currentTimeMillis();
+        while (System.currentTimeMillis() - startTime < RESPONSE_TIMEOUT) {
+            if (inputStream.available() > 0) {
+                int b = inputStream.read();
+                if (b == ACK) {
+                    eotAckReceived = true;
+                    break;
+                }
+            }
+        }
+        if (!eotAckReceived) {
+            throw new IOException("Timeout waiting for ACK response from receiver after EOT");
+        }
+
+        // Close file input stream
+        fileInputStream.close();
+    }
+
+    private void sendPacket(byte[] data, int length, int blockNumber) throws IOException {
+        // Construct packet
+        byte[] packet = new byte[PACKET_SIZE + 3];
+        packet[0] = SOH; // Start of Header
+        packet[1] = (byte) blockNumber;
+        packet[2] = (byte) ~blockNumber;
+        System.arraycopy(data, 0, packet, 3, length);
+
+        // Calculate checksum
+        byte checksum = 0;
+        for (int i = 0; i < PACKET_SIZE; i++) {
+            checksum += packet[i + 3];
+        }
+        packet[PACKET_SIZE + 3 - 1] = checksum;
+
+        // Send packet
+        outputStream.write(packet);
+        outputStream.flush();
+    }
+
+    private void sendEOT() throws IOException {
+        outputStream.write(EOT);
+        outputStream.flush();
     }
 }
+

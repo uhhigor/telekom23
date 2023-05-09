@@ -1,27 +1,21 @@
 package org.example;
 
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 
 public class XModemReceiver {
 
-    // STX, SOH, EOT and ACK characters
-    private static final byte STX = 0x02;
-    private static final byte SOH = 0x01;
-    private static final byte EOT = 0x04;
-    private static final byte ACK = 0x06;
+    // XModem control characters
+    private static final byte SOH = 0x01; // Start Of Header
+    private static final byte EOT = 0x04; // End Of Transmission
+    private static final byte ACK = 0x06; // Acknowledge
+    private static final byte NAK = 0x15; // Negative Acknowledge
 
     // XModem packet size
     private static final int PACKET_SIZE = 128;
 
-    // Wait time for packet in milliseconds
-    private static final int PACKET_TIMEOUT = 1000;
-
     // Input and output streams
-    private InputStream inputStream;
-    private OutputStream outputStream;
+    private final InputStream inputStream;
+    private final OutputStream outputStream;
 
     public XModemReceiver(InputStream inputStream, OutputStream outputStream) {
         this.inputStream = inputStream;
@@ -29,73 +23,81 @@ public class XModemReceiver {
     }
 
     public void receiveFile(String fileName) throws IOException {
-        FileOutputStream fileOutputStream = new FileOutputStream(fileName);
-        byte[] buffer = new byte[PACKET_SIZE];
-        boolean endOfTransmission = false;
-        byte expectedPacketNumber = 1;
+        // Open file for writing
+        File file = new File(fileName);
+        FileOutputStream fileOutputStream = new FileOutputStream(file);
 
-        while (!endOfTransmission) {
-            byte[] packet = readPacket();
+        // Send NAK to sender
+        outputStream.write(NAK);
+        outputStream.flush();
 
+        // Receive file contents
+        int blockNumber = 1;
+        boolean eofReceived = false;
+        while (!eofReceived) {
+            // Receive packet
+            byte[] packet = receivePacket(blockNumber);
+
+            // Process packet
             if (packet == null) {
-                // Timeout error
-                break;
-            }
-
-            byte packetNumber = packet[1];
-            byte packetNumberComplement = packet[2];
-
-            if (packetNumber != ~packetNumberComplement) {
-                // Packet number error
-                break;
-            }
-
-            if (packetNumber == expectedPacketNumber) {
-                // Write data to file
+                // Timeout waiting for packet
+                throw new IOException("Timeout waiting for packet from sender");
+            } else if (packet.length == 0) {
+                // End of file received
+                eofReceived = true;
+            } else if (packet[1] == blockNumber) {
+                // Valid packet received
                 fileOutputStream.write(packet, 3, PACKET_SIZE);
-                expectedPacketNumber++;
-
-                // Send ACK
-                outputStream.write(ACK);
-                outputStream.flush();
-            } else if (packetNumber == 1 && expectedPacketNumber == 0) {
-                // XModem-1K block mode
-                fileOutputStream.write(buffer, 0, PACKET_SIZE);
-                fileOutputStream.write(packet, 3, PACKET_SIZE);
-                expectedPacketNumber = 2;
-
-                // Send ACK
-                outputStream.write(ACK);
-                outputStream.flush();
-            } else if (packet[0] == EOT) {
-                // End of transmission
-                endOfTransmission = true;
-
-                // Send ACK
+                blockNumber++;
                 outputStream.write(ACK);
                 outputStream.flush();
             } else {
-                // Unknown packet
+                // Invalid block number received
+                outputStream.write(NAK);
+                outputStream.flush();
             }
         }
 
+        // Send ACK to sender
+        outputStream.write(ACK);
+        outputStream.flush();
+
+        // Close file output stream
         fileOutputStream.close();
     }
 
-    private byte[] readPacket() throws IOException {
-        byte[] packet = new byte[PACKET_SIZE + 4];
-
+    private byte[] receivePacket(int blockNumber) throws IOException {
+        // Receive packet
+        byte[] packet = new byte[PACKET_SIZE + 3];
+        int bytesRead;
         long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < PACKET_TIMEOUT) {
-            if (inputStream.available() > 0) {
-                int bytesRead = inputStream.read(packet);
-                if (bytesRead == PACKET_SIZE + 4) {
-                    return packet;
+        while (System.currentTimeMillis() - startTime < XModemSender.RESPONSE_TIMEOUT) {
+            if (inputStream.available() >= PACKET_SIZE + 3) {
+                bytesRead = inputStream.read(packet);
+                if (bytesRead == PACKET_SIZE + 3 && packet[0] == SOH && packet[1] == blockNumber && packet[2] == ~blockNumber) {
+                    // Valid packet received
+                    byte checksum = 0;
+                    for (int i = 0; i < PACKET_SIZE; i++) {
+                        checksum += packet[i + 3];
+                    }
+                    if (checksum == packet[PACKET_SIZE + 3 - 1]) {
+                        // Checksum is valid
+                        return packet;
+                    } else {
+                        // Checksum is invalid
+                        outputStream.write(NAK);
+                        outputStream.flush();
+                    }
+                } else if (bytesRead == 1 && packet[0] == EOT) {
+                    // End of file received
+                    return new byte[0];
+                } else {
+                    // Invalid packet received
+                    outputStream.write(NAK);
+                    outputStream.flush();
                 }
             }
         }
-
         return null;
     }
 }
-

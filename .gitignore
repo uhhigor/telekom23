@@ -4,8 +4,8 @@ target/
 !**/src/test/**/target/
 /zad1 - korekcja transmisji/.idea
 /zad2 - Xmodem/.idea
+/zad2 - Xmodem/cmake-build-debug
 /zad1 - korekcja transmisji/target
-zad2 - Xmodem/target
 /.idea
 
 ### IntelliJ IDEA ###

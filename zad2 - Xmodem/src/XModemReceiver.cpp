@@ -1,7 +1,7 @@
 #include <iostream>
-#include <fstream>
 #include <string>
 #include <chrono>
+#include <stdexcept>
 #include <cstring>
 #include "XModemReceiver.h"
 #include "variables.h"
@@ -13,11 +13,13 @@ XModemReceiver::XModemReceiver(istream &inputStream, ostream &outputStream) : in
 void XModemReceiver::receiveFile(const string& fileName) {
     // Open file for writing
     ofstream fileOutputStream(fileName, ios::binary);
+    if (!fileOutputStream.is_open()) {
+        throw runtime_error("Could not open file for writing");
+    }
 
     // Send NAK to sender
     outputStream.write(&NAK, 1);
     outputStream.flush();
-
     // Receive file contents
     int blockNumber = 1;
     bool eofReceived = false;
@@ -36,40 +38,36 @@ void XModemReceiver::receiveFile(const string& fileName) {
                     for (int i = 0; i < PACKET_SIZE; i++) {
                         checksum += packet[i + 3];
                     }
-                    if (checksum == packet[PACKET_SIZE + 3 - 1]) {
-                        // Checksum is valid
-                        fileOutputStream.write(packet + 3, PACKET_SIZE);
-                        blockNumber++;
-                        outputStream.write(&ACK, 1);
-                        outputStream.flush();
+                        if (checksum == packet[PACKET_SIZE + 2]) {
+                            // Checksum is valid
+                            fileOutputStream.write(packet + 3, PACKET_SIZE);
+                            blockNumber++;
+                            outputStream.write(&ACK, 1);
+                            outputStream.flush();
+                        } else {
+                            // Checksum is invalid
+                            outputStream.write(&NAK, 1);
+                            outputStream.flush();
+                        }
+                    } else if (bytesRead == 1 && packet[0] == EOT) {
+                        // End of file received
+                        eofReceived = true;
+                        break;
                     } else {
-                        // Checksum is invalid
+                        // Invalid packet received
                         outputStream.write(&NAK, 1);
                         outputStream.flush();
                     }
-                } else if (bytesRead == 1 && packet[0] == EOT) {
-                    // End of file received
-                    eofReceived = true;
-                    break;
-                } else {
-                    // Invalid packet received
-                    outputStream.write(&NAK, 1);
-                    outputStream.flush();
                 }
             }
+            if (bytesRead == 0) {
+                // Timeout waiting for packet
+                throw runtime_error("Timeout waiting for packet from sender");
+            }
         }
-        if (bytesRead == 0) {
-            // Timeout waiting for packet
-            throw runtime_error("Timeout waiting for packet from sender");
-        }
+        // Send ACK to sender
+        outputStream.write(&ACK, 1);
+        outputStream.flush();
+        // Close file output stream
+        fileOutputStream.close();
     }
-
-    // Send ACK to sender
-    outputStream.write(&ACK, 1);
-    outputStream.flush();
-
-    // Close file output stream
-    fileOutputStream.close();
-}
-
-

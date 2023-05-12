@@ -13,7 +13,7 @@ private:
 public:
     XModemSender(istream &inputStream, ostream &outputStream);
     void sendFile(const string &fileName);
-    void sendPacket(char data[], int length, int blockNumber);
+    void sendPacket(char data[], int length, int blockNumber, int additionalBlockLength);
     void sendEOT();
 };
 #endif //UNTITLED_XMODEMSENDER_H

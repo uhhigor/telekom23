@@ -16,32 +16,43 @@ void XModemSender::sendFile(const string &fileName) {
         throw runtime_error("Unable to open file: " + fileName);
     }
 
-
-    // Wait for NAK from receiver
+    // Wait for NAK from receive
+    int type;
     bool nakReceived = false;
     auto startTime = chrono::system_clock::now();
-    while (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - startTime).count() < 60000) {
-        if (inputStream.rdbuf()->in_avail() > 0) {
-            int b = inputStream.get();
-            if (b == NAK) {
+    while (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - startTime).count() < TRANSMISSION_TIMEOUT) {
+        if (inputStream.rdbuf()->in_avail() > 0) {   //Checks if there is anything to read
+            type = inputStream.get();
+            if (type == NAK || type == C) {
                 nakReceived = true;
                 break;
             }
         }
-        this_thread::sleep_for(chrono::milliseconds(10));
+        this_thread::sleep_for(chrono::milliseconds(RESPONSE_TIMEOUT));
     }
     if (!nakReceived) {
         throw runtime_error("Timeout waiting for NAK response from receiver");
     }
+
+    //Check transmission type CRC or not
+    int additionalBlockLength;
+    if(C == type)
+        additionalBlockLength = 5;
+    else
+        additionalBlockLength = 4;
+
     // Send file contents
     int blockNumber = 1;
     char packetData[PACKET_SIZE];
     int bytesRead;
-    while ((bytesRead = fileInputStream.readsome(packetData, PACKET_SIZE)) > 0) {
+    while ((bytesRead = fileInputStream.readsome(packetData, PACKET_SIZE)) > 0) {  //Read from buffer
+
         // Send packet
-        sendPacket(packetData, bytesRead, blockNumber);
+        sendPacket(packetData, bytesRead, blockNumber, additionalBlockLength);
+
         // Increment block number
         blockNumber++;
+
         // Wait for ACK or NAK response
         bool ackReceived = false;
         bool nakReceivedAgain = false;
@@ -68,15 +79,17 @@ void XModemSender::sendFile(const string &fileName) {
             }
         }
     }
+
     // Send EOT
     sendEOT();
+
     // Wait for ACK response
     bool eotAckReceived = false;
     startTime = chrono::system_clock::now();
     while (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - startTime).count() <
            RESPONSE_TIMEOUT) {
         if (inputStream.rdbuf()->in_avail() > 0) {
-            int b = inputStream.get();
+            int b = inputStream.get();             //if ACK returned, close transmission
             if (b == ACK) {
                 eotAckReceived = true;
                 break;
@@ -89,21 +102,19 @@ void XModemSender::sendFile(const string &fileName) {
     fileInputStream.close();
 }
 
-void XModemSender::sendPacket(char data[], int length, int blockNumber) {
+void XModemSender::sendPacket(char data[], int length, int blockNumber, int additionalBlockLength) {
 
-    char packet[PACKET_SIZE + 5];
-    bool CRC16;
+    char packet[PACKET_SIZE + additionalBlockLength];
 
     // Calculate checksum
-    char checksum = 0;
     CalculateCheckSum calculateCheckSum;
 
-    if (CRC16) {
-        checksum = (char) calculateCheckSum.calculateCRC16(data, length);
-        packet[PACKET_SIZE + 3] = (char) (checksum >> 8);
-        packet[PACKET_SIZE + 4] = (char) checksum;
+    if (additionalBlockLength == 5) {
+        uint16_t crc = calculateCheckSum.calculateCRC16(data, length);
+        packet[PACKET_SIZE + 3] = static_cast<char>((crc >> 8) & 0xFF);
+        packet[PACKET_SIZE + 4] = static_cast<char>(crc & 0xFF);
     } else {
-        checksum = (char) calculateCheckSum.calculateCheckSum(data, length);
+        char checksum = (char) calculateCheckSum.calculateCheckSum(data, length);
         packet[PACKET_SIZE + 3] = checksum;
     }
 
@@ -118,7 +129,7 @@ void XModemSender::sendPacket(char data[], int length, int blockNumber) {
     outputStream.flush();
 }
 
-    void XModemSender::sendEOT() {
-        outputStream.write(&EOT, 1);
-        outputStream.flush();
-    }
+void XModemSender::sendEOT() {
+    outputStream.write(&EOT, 1);
+    outputStream.flush();
+}

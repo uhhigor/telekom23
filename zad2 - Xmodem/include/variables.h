@@ -13,6 +13,7 @@ const int PACKET_SIZE = 128;
 
 // Response timeout in milliseconds
 const int RESPONSE_TIMEOUT = 10000;
+const int TRANSMISSION_TIMEOUT = 60000;
 
 // Speed of transmission
 const int BaudRate = 9600;

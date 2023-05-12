@@ -2,15 +2,22 @@
 #define UNTITLED_SERIALPORT_H
 
 #include <windows.h>
+#include <fstream>
+#include <iostream>
+
+using namespace std;
 
 class SerialPort {
 
 private:
     HANDLE handleCom;
-    BOOL isReadyPort;
     DCB controlDCB;
 public:
-    void initialize(char *chosenPort);
+    SerialPort(char *chosenPort);
+    void sendFile(const string &fileName);
+    void receiveFile(const string& fileName);
+    void sendPacket(char data[], DWORD length, int blockNumber, int additionalBlockLength);
+    void sendEOT();
 };
 
 

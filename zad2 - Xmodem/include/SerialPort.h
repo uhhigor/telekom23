@@ -11,11 +11,10 @@ class SerialPort {
 
 private:
     HANDLE handleCom;
-    DCB controlDCB;
 public:
-    SerialPort(char *chosenPort);
-    void sendFile(const string &fileName);
-    void receiveFile(const string& fileName);
+    explicit SerialPort(const string &chosenPort);
+    void sendFile(const string &fileName, bool isCRCSupported);
+    void receiveFile(const string& fileName, bool isCRCSupported);
     void sendPacket(char data[], DWORD length, int blockNumber, int additionalBlockLength);
     void sendEOT();
 };

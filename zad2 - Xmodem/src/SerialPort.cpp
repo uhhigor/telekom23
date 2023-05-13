@@ -7,35 +7,58 @@
 #include "variables.h"
 #include "CalculateCheckSum.h"
 
-SerialPort::SerialPort(char *chosenPort) {
-    handleCom = CreateFile(chosenPort, GENERIC_READ | GENERIC_WRITE, 0,
-                           nullptr, OPEN_EXISTING, 0, nullptr);
-    //SetupComm(handleCom, 1, 128);
-    GetCommState(handleCom, &controlDCB);
-    controlDCB.BaudRate = BaudRate;
-    controlDCB.ByteSize = 8;
-    controlDCB.Parity = NOPARITY;
-    controlDCB.StopBits = ONESTOPBIT;
-    controlDCB.fParity = TRUE;
-    controlDCB.fDtrControl = DTR_CONTROL_DISABLE;
-    controlDCB.fRtsControl = RTS_CONTROL_DISABLE;
-    controlDCB.fOutxCtsFlow = FALSE;
-    controlDCB.fOutxDsrFlow = FALSE;
-    controlDCB.fDsrSensitivity = FALSE;
-    controlDCB.fAbortOnError = FALSE;
-    controlDCB.fOutX = FALSE;
-    controlDCB.fInX = FALSE;
-    controlDCB.fErrorChar = FALSE;
-    controlDCB.fNull = FALSE;
-    SetCommState(handleCom, &controlDCB);
-}
-DWORD bytesRead, bytesWritten;
-
-void SerialPort::sendFile(const string &fileName) {
-    // Open file for reading
+SerialPort::SerialPort(const string& chosenPort)
+{
+    handleCom = CreateFile((R"(\\.\)" + chosenPort).c_str(), GENERIC_READ | GENERIC_WRITE, 0,
+                           NULL, OPEN_EXISTING, 0, NULL);
     if (handleCom == INVALID_HANDLE_VALUE)
     {
-        throw std::runtime_error("Unable to open file: " + fileName);
+        DWORD error = GetLastError();
+        LPVOID lpMsgBuf;
+        FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                      NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR) &lpMsgBuf, 0, NULL);
+        string errorMessage((LPTSTR) lpMsgBuf);
+        LocalFree(lpMsgBuf);
+        throw runtime_error("Failed to open serial port " + chosenPort + ": " + errorMessage);
+    }
+
+    // Set up communication parameters
+    DCB dcb = { 0 };
+    dcb.DCBlength = sizeof(dcb);
+    if (!GetCommState(handleCom, &dcb))
+    {
+        throw runtime_error("Failed to get communication state");
+    }
+    dcb.BaudRate = CBR_9600;
+    dcb.ByteSize = 8;
+    dcb.Parity = NOPARITY;
+    dcb.StopBits = ONESTOPBIT;
+    dcb.fParity = TRUE;
+    dcb.fDtrControl = DTR_CONTROL_DISABLE;
+    dcb.fRtsControl = RTS_CONTROL_DISABLE;
+    dcb.fOutxCtsFlow = FALSE;
+    dcb.fOutxDsrFlow = FALSE;
+    dcb.fDsrSensitivity = FALSE;
+    dcb.fAbortOnError = FALSE;
+    dcb.fOutX = FALSE;
+    dcb.fInX = FALSE;
+    dcb.fErrorChar = FALSE;
+    dcb.fNull = FALSE;
+    if (!SetCommState(handleCom, &dcb))
+    {
+        throw runtime_error("Failed to set communication state");
+    }
+}
+
+DWORD bytesRead, bytesWritten;
+
+void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
+    cout<<"\n";
+    cout<<fileName;
+    ifstream file(fileName, ios::binary);
+    if (!file)
+    {
+        throw runtime_error("Failed to open file: " + fileName);
     }
 
     // Wait for NAK from receive
@@ -156,15 +179,17 @@ void SerialPort::sendEOT() {
     WriteFile(handleCom, &EOT, 1, &bytesWritten, nullptr);
 }
 
-void SerialPort::receiveFile(const string &fileName) {
+void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
     // Open file for writing
-    if (handleCom == INVALID_HANDLE_VALUE) {
-        throw std::runtime_error("Failed to open serial port");
+    ofstream file(fileName, ios::binary);
+    if (!file)
+    {
+        throw std::runtime_error("Failed to open file: " + fileName);
     }
-    bool isCrcSupported;
+
     int additionalBlockLength;
 
-    if(isCrcSupported){
+    if(isCRCSupported){
         WriteFile(handleCom, &ACK, 1, nullptr, nullptr);
         additionalBlockLength = 5;
     } else {
@@ -240,5 +265,6 @@ void SerialPort::receiveFile(const string &fileName) {
     // Close file output stream
     CloseHandle(handleCom);
 }
+
 
 

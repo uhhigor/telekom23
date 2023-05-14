@@ -53,12 +53,11 @@ SerialPort::SerialPort(const string& chosenPort)
 DWORD bytesRead, bytesWritten;
 
 void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
-    cout<<"\n";
-    cout<<fileName;
-    ifstream file(fileName, ios::binary);
-    if (!file)
-    {
-        throw runtime_error("Failed to open file: " + fileName);
+    ifstream file(fileName, ios::in | ios::binary);;
+    if (file.is_open()) {
+        cout<<"\nFile opened successfully";
+    } else {
+        throw runtime_error("\nFailed to open file: " + fileName);
     }
 
     // Wait for NAK from receive
@@ -181,10 +180,11 @@ void SerialPort::sendEOT() {
 
 void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
     // Open file for writing
-    ofstream file(fileName, ios::binary);
-    if (!file)
-    {
-        throw std::runtime_error("Failed to open file: " + fileName);
+    ofstream file(fileName, ios::out | ios::binary);;
+    if (file.is_open()) {
+        cout<<"\nFile opened successfully";
+    } else {
+        throw runtime_error("Failed to open file: " + fileName);
     }
 
     int additionalBlockLength;

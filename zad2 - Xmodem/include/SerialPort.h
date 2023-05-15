@@ -15,7 +15,7 @@ public:
     explicit SerialPort(const string &chosenPort);
     void sendFile(const string &fileName, bool isCRCSupported);
     void receiveFile(const string& fileName, bool isCRCSupported);
-    void sendPacket(char data[], DWORD length, int blockNumber, int additionalBlockLength);
+    void sendPacket(char data[], int length, int blockNumber, int additionalBlockLength);
     void sendEOT();
 };
 

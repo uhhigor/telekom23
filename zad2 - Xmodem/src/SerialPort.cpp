@@ -48,139 +48,163 @@ SerialPort::SerialPort(const string& chosenPort)
     {
         throw runtime_error("Failed to set communication state");
     }
+    COMMTIMEOUTS  portTimings{0};
+    portTimings.ReadIntervalTimeout = 10000;
+    portTimings.ReadTotalTimeoutMultiplier = 10000;
+    portTimings.ReadTotalTimeoutConstant = 10000;
+    portTimings.WriteTotalTimeoutMultiplier = 100;
+    portTimings.WriteTotalTimeoutConstant = 100;
+    SetCommTimeouts(handleCom, &portTimings);
 }
 
-DWORD bytesRead, bytesWritten;
+unsigned long bitsLengthInChar;
+bool isPacket;
+bool nakReceived = false;
 
 void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
-    ifstream file(fileName, ios::in | ios::binary);;
+    ifstream file;
+    file.open(fileName, ios::in | ios::out | ios::binary);
     if (file.is_open()) {
-        cout<<"\nFile opened successfully";
+        cout << "\nFile opened successfully";
     } else {
         throw runtime_error("\nFailed to open file: " + fileName);
     }
 
     // Wait for NAK from receive
-    BYTE type;
-    bool nakReceived = false;
-    auto startTime = chrono::system_clock::now();
-    while (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - startTime).count() < TRANSMISSION_TIMEOUT) {
-        ReadFile(handleCom, &type, 1, &bytesRead, nullptr);
-        if (bytesRead > 0) {   //Checks if there is anything to read
+    char type;
+    while(true) {
+        ReadFile(handleCom, &type, 1, &bitsLengthInChar, nullptr);
+        if (bitsLengthInChar > 0) {   //Checks if there is anything to read
             if (type == NAK || type == C) {
+                cout << "\nConnection has been established";
                 nakReceived = true;
                 break;
+            } else if (!nakReceived) {
+                throw runtime_error("Timeout waiting for NAK response from receiver");
             }
         }
-        this_thread::sleep_for(chrono::milliseconds(RESPONSE_TIMEOUT));
-    }
-    if (!nakReceived) {
-        throw runtime_error("Timeout waiting for NAK response from receiver");
     }
 
     //Check transmission type CRC or not
     int additionalBlockLength;
-    if(C == type)
-        additionalBlockLength = 5;
+    if (C == type)
+        additionalBlockLength = 2;
     else
-        additionalBlockLength = 4;
+        additionalBlockLength = 1;
 
     // Send file contents
     int blockNumber = 1;
     char packetData[PACKET_SIZE];
-    while (ReadFile(handleCom, packetData, PACKET_SIZE, &bytesRead, nullptr) && bytesRead > 0) {
-        bytesRead = 0;
-        // Send packet
-        sendPacket(packetData,bytesRead, blockNumber, additionalBlockLength);
-
-        // Increment block number
-        blockNumber++;
-
-        // Wait for ACK or NAK response
+    while (!file.eof()) {
+        // Read from file
+        for (int i = 0; i < PACKET_SIZE; i++)
+            packetData[i] = (char) 26;
+        int w = 0;
+        while (w < PACKET_SIZE && !file.eof()) {
+            packetData[w] = file.get();
+            cout << "\nPacket Data: " << packetData[w];
+            if (file.eof()) packetData[w] = (char) 26;
+            w++;
+        }
+        isPacket = false;
         bool ackReceived = false;
         bool nakReceivedAgain = false;
-        startTime = chrono::system_clock::now();
-        while (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - startTime).count() < RESPONSE_TIMEOUT) {
-            BYTE pom;
-            bytesRead = 0;
-            if (ReadFile(handleCom, &pom, 1, &bytesRead, nullptr) && bytesRead > 0){
-                if (pom == ACK) {
-                    ackReceived = true;
-                    break;
-                } else if (pom == NAK) {
-                    nakReceivedAgain = true;
-                    break;
+        while (!isPacket) {
+            // Send packet
+            sendPacket(packetData,PACKET_SIZE, blockNumber, additionalBlockLength);
+
+            // Increment block number
+            blockNumber++;
+
+            // Wait for ACK or NAK response
+
+            char pom;
+            bitsLengthInChar = 0;
+            while (true) {
+                if (ReadFile(handleCom, &pom, 1, &bitsLengthInChar, nullptr) && bitsLengthInChar > 0) {
+                    if (pom == ACK) {
+                        isPacket = true;
+                        ackReceived = true;
+                        break;
+                    } else if (pom == NAK) {
+                        nakReceivedAgain = true;
+                        break;
+                    }
+                }
+                if (!ackReceived) {
+                    if (nakReceivedAgain) {
+                        // Resend packet
+                        blockNumber--;
+                    } else {
+                        throw runtime_error("Timeout waiting for ACK/NAK response from receiver");
+                    }
                 }
             }
-        }
-        if (!ackReceived) {
-            if (nakReceivedAgain) {
-                // Resend packet
-                blockNumber--;
-            } else {
-                throw runtime_error("Timeout waiting for ACK/NAK response from receiver");
             }
         }
-    }
 
     // Send EOT
     sendEOT();
 
     // Wait for ACK response
     bool eotAckReceived = false;
-    startTime = chrono::system_clock::now();
-    while (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - startTime).count() <
-           RESPONSE_TIMEOUT) {
-        BYTE pom;
-        bytesRead = 0;
-        if (ReadFile(handleCom, &pom, 1, &bytesRead, nullptr) && bytesRead > 0) {
-            if (pom == ACK) {              //if ACK returned, close transmission
-                eotAckReceived = true;
-                break;
-            }
+    char pom;
+    bitsLengthInChar = 0;
+    if (ReadFile(handleCom, &pom, 1, &bitsLengthInChar, nullptr) && bitsLengthInChar > 0) {
+        if (pom == ACK) {
+
+            eotAckReceived = true;
         }
     }
     if (!eotAckReceived) {
         throw runtime_error("Timeout waiting for ACK response from receiver after EOT");
     }
+    cout << "\nTransmission complete";
     CloseHandle(handleCom);
 }
 
-void SerialPort::sendPacket(char *data, DWORD length, int blockNumber, int additionalBlockLength) {
-    char packet[PACKET_SIZE + additionalBlockLength];
+void SerialPort::sendPacket(char *data, int length, int blockNumber, int additionalBlockLength) {
+    cout<<"\nSending " << blockNumber << " packet";
+    char header[3];
+    char packet[PACKET_SIZE];
+    char checksum[additionalBlockLength];
+
+    // Construct packet header and copy data
+    header[0] = SOH; // Start of Header
+    header[1] = (char) blockNumber;
+    header[2] = (char) ~blockNumber;
+    WriteFile(handleCom, header, 3, &bitsLengthInChar, nullptr);
+    memcpy(packet, data, length);
+
+    // Send packet
+    WriteFile(handleCom, packet, PACKET_SIZE, &bitsLengthInChar, nullptr);
+    if (bitsLengthInChar != PACKET_SIZE) {
+        throw runtime_error("Failed to write data to serial port");
+    }
 
     // Calculate checksum
     CalculateCheckSum calculateCheckSum;
 
-    if (additionalBlockLength == 5) {
+    if (additionalBlockLength == 2) {
         uint16_t crc = calculateCheckSum.calculateCRC16(data, length);
-        packet[PACKET_SIZE + 3] = static_cast<char>((crc >> 8) & 0xFF);
-        packet[PACKET_SIZE + 4] = static_cast<char>(crc & 0xFF);
+        checksum[0] = static_cast<char>((crc >> 8) & 0xFF);
+        checksum[1] = static_cast<char>(crc & 0xFF);
+        WriteFile(handleCom, checksum, 2, &bitsLengthInChar, nullptr);
     } else {
-        char checksum = (char) calculateCheckSum.calculateCheckSum(data, length);
-        packet[PACKET_SIZE + 3] = checksum;
-    }
-
-    // Construct packet header and copy data
-    packet[0] = SOH; // Start of Header
-    packet[1] = (char) blockNumber;
-    packet[2] = (char) ~blockNumber;
-    memcpy(packet + 3, data, length);
-
-    // Send packet
-    WriteFile(handleCom, packet, PACKET_SIZE + additionalBlockLength, &bytesWritten, nullptr);
-    if (bytesWritten != PACKET_SIZE + additionalBlockLength) {
-        throw runtime_error("Failed to write data to serial port");
+        char checkSum = (char) calculateCheckSum.calculateCheckSum(data, length);
+        checksum[0] = checkSum;
+        WriteFile(handleCom, checksum, 1, &bitsLengthInChar, nullptr);
     }
 }
 
+
 void SerialPort::sendEOT() {
-    WriteFile(handleCom, &EOT, 1, &bytesWritten, nullptr);
+    WriteFile(handleCom, &EOT, 1, &bitsLengthInChar, nullptr);
 }
 
 void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
     // Open file for writing
-    ofstream file(fileName, ios::out | ios::binary);;
+    ofstream file(fileName, ios::in | ios::out | ios::binary);;
     if (file.is_open()) {
         cout<<"\nFile opened successfully";
     } else {
@@ -190,11 +214,11 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
     int additionalBlockLength;
 
     if(isCRCSupported){
-        WriteFile(handleCom, &ACK, 1, nullptr, nullptr);
+        WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
         additionalBlockLength = 5;
     } else {
         // Send NAK to sender
-        WriteFile(handleCom, &NAK, 1, nullptr, nullptr);
+        WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
         additionalBlockLength = 4;
     }
 
@@ -211,8 +235,8 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
             // Check if there is enough data available to read a packet
             DWORD bytesAvailable = 0;
             PeekNamedPipe(handleCom, nullptr, 0, nullptr, &bytesAvailable, nullptr);
-            ReadFile(handleCom, packet, PACKET_SIZE + additionalBlockLength, &bytesRead, nullptr);
-                if (bytesRead == PACKET_SIZE + additionalBlockLength && packet[0] == SOH && packet[1] == blockNumber && packet[2] == ~blockNumber) {
+            ReadFile(handleCom, packet, PACKET_SIZE + additionalBlockLength, &bitsLengthInChar, nullptr);
+                if (bitsLengthInChar == PACKET_SIZE + additionalBlockLength && packet[0] == SOH && packet[1] == blockNumber && packet[2] == ~blockNumber) {
                     // Valid packet received
                     memcpy(data, packet + 3, PACKET_SIZE);
                     CalculateCheckSum calculateCheckSum;
@@ -225,42 +249,42 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
                         if (crcChecksum[0] == packet[PACKET_SIZE + additionalBlockLength - 2]
                             && crcChecksum[1] == packet[PACKET_SIZE + additionalBlockLength - 1]) {
                             // Checksum is valid
-                            WriteFile(handleCom, packet + 3, PACKET_SIZE, &bytesWritten, nullptr);
+                            WriteFile(handleCom, packet + 3, PACKET_SIZE, &bitsLengthInChar, nullptr);
                             blockNumber++;
-                            WriteFile(handleCom, &ACK, 1, nullptr, nullptr);
+                            WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
                         } else {
                             // Checksum is invalid
-                            WriteFile(handleCom, &NAK, 1, nullptr, nullptr);
+                            WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
                         }
                     } else {
                         checksum = (char) calculateCheckSum.calculateCheckSum(data, PACKET_SIZE);
                         if (checksum == packet[PACKET_SIZE + additionalBlockLength - 1]) {
                             // Checksum is valid
-                            WriteFile(handleCom, packet + 3, PACKET_SIZE, &bytesWritten, nullptr);
+                            WriteFile(handleCom, packet + 3, PACKET_SIZE, &bitsLengthInChar, nullptr);
                             blockNumber++;
-                            WriteFile(handleCom, &ACK, 1, nullptr, nullptr);
+                            WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
                         } else {
                             // Checksum is invalid
-                            WriteFile(handleCom, &NAK, 1, nullptr, nullptr);
+                            WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
                         }
                     }
-                } else if (bytesRead == 1 && packet[0] == EOT) {
+                } else if (bitsLengthInChar == 1 && packet[0] == EOT) {
                     // End of file received
                     eofReceived = true;
                     break;
                 } else {
                     // Invalid packet received
-                    WriteFile(handleCom, &NAK, 1, nullptr, nullptr);
+                    WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
                 }
         }
-        if (bytesRead == 0) {
+        if (bitsLengthInChar == 0) {
             // Timeout waiting for packet
             throw runtime_error("Timeout waiting for packet from sender");
         }
     }
 
     // Send ACK to sender
-    WriteFile(handleCom, &ACK, 1, nullptr, nullptr);
+    WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
 
     // Close file output stream
     CloseHandle(handleCom);

@@ -2,51 +2,6 @@ cos jest a czegos nie ma
 abc
 abc
 abc
-Ala ma kota
-cos jest a czegos nie ma
-abc
-abc
-abc
-Ala ma kota
-cos jest a czegos nie ma
-abc
-abc
-abc
-Ala ma kota
-cos jest a czegos nie ma
-abc
-abc
-abc
-Ala ma kota
-cos jest a czegos nie ma
-abc
-abc
-abc
-Ala ma kota
-cos jest a czegos nie ma
-abc
-abc
-abc
-Ala ma kota
-cos jest a czegos nie ma
-abc
-abc
-abc
-Ala ma kota
-cos jest a czegos nie ma
-abc
-abc
-abc
-Ala ma kota
-cos jest a czegos nie ma
-abc
-abc
-abc
-Ala ma kota
-cos jest a czegos nie ma
-abc
-abc
-abc
 Ala ma kotacos jest a czegos nie ma
            abc
            abc
@@ -76,3 +31,4 @@ Ala ma kotacos jest a czegos nie ma
                                                                              abc
                                                                              abc
                                                                              Ala ma kota
+

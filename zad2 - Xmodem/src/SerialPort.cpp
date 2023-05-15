@@ -63,9 +63,12 @@ bool nakReceived = false;
 
 void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
     ifstream file;
-    file.open(fileName, ios::in | ios::out | ios::binary);
+    file.open(fileName, ios::in | ios::binary );
     if (file.is_open()) {
         cout << "\nFile opened successfully";
+        if (file.peek() == ifstream::traits_type::eof()) {
+            throw runtime_error("File is empty");
+        }
     } else {
         throw runtime_error("\nFailed to open file: " + fileName);
     }
@@ -92,56 +95,52 @@ void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
     else
         additionalBlockLength = 1;
 
+    isPacket = false;
+    bool ackReceived = false;
+    bool nakReceivedAgain = false;
+
     // Send file contents
     int blockNumber = 1;
     char packetData[PACKET_SIZE];
-    while (!file.eof()) {
-        // Read from file
-        for (int i = 0; i < PACKET_SIZE; i++)
-            packetData[i] = (char) 26;
-        int w = 0;
-        while (w < PACKET_SIZE && !file.eof()) {
-            packetData[w] = file.get();
-            cout << "\nPacket Data: " << packetData[w];
-            if (file.eof()) packetData[w] = (char) 26;
-            w++;
+    while (true) {
+        fill_n(packetData, PACKET_SIZE, ' '); //Clear values
+        file.read(packetData, PACKET_SIZE);
+        int bytesRead = file.gcount();
+        if (bytesRead == 0) {
+            // End of file reached, break the loop
+            break;
         }
-        isPacket = false;
-        bool ackReceived = false;
-        bool nakReceivedAgain = false;
-        while (!isPacket) {
-            // Send packet
-            sendPacket(packetData,PACKET_SIZE, blockNumber, additionalBlockLength);
 
-            // Increment block number
-            blockNumber++;
+        // Send packet
+        sendPacket(packetData,PACKET_SIZE, blockNumber, additionalBlockLength);
 
-            // Wait for ACK or NAK response
-
-            char pom;
-            bitsLengthInChar = 0;
-            while (true) {
-                if (ReadFile(handleCom, &pom, 1, &bitsLengthInChar, nullptr) && bitsLengthInChar > 0) {
-                    if (pom == ACK) {
-                        isPacket = true;
-                        ackReceived = true;
-                        break;
-                    } else if (pom == NAK) {
-                        nakReceivedAgain = true;
-                        break;
-                    }
-                }
-                if (!ackReceived) {
-                    if (nakReceivedAgain) {
-                        // Resend packet
-                        blockNumber--;
-                    } else {
-                        throw runtime_error("Timeout waiting for ACK/NAK response from receiver");
-                    }
+        // Wait for ACK or NAK response
+        char pom;
+        bitsLengthInChar = 0;
+        while (true) {
+            if (ReadFile(handleCom, &pom, 1, &bitsLengthInChar, nullptr) && bitsLengthInChar > 0) {
+                if (pom == ACK) {
+                    isPacket = true;
+                    ackReceived = true;
+                    break;
+                } else if (pom == NAK) {
+                    nakReceivedAgain = true;
+                    break;
                 }
             }
+            if (!ackReceived) {
+                if (nakReceivedAgain) {
+                    // Resend packet
+                    blockNumber--;
+                } else {
+                    throw runtime_error("Timeout waiting for ACK/NAK response from receiver");
+                }
             }
         }
+
+        // Increment block number
+        blockNumber++;
+    }
 
     // Send EOT
     sendEOT();
@@ -152,7 +151,6 @@ void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
     bitsLengthInChar = 0;
     if (ReadFile(handleCom, &pom, 1, &bitsLengthInChar, nullptr) && bitsLengthInChar > 0) {
         if (pom == ACK) {
-
             eotAckReceived = true;
         }
     }
@@ -160,6 +158,7 @@ void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
         throw runtime_error("Timeout waiting for ACK response from receiver after EOT");
     }
     cout << "\nTransmission complete";
+    file.close();
     CloseHandle(handleCom);
 }
 
@@ -177,8 +176,8 @@ void SerialPort::sendPacket(char *data, int length, int blockNumber, int additio
     memcpy(packet, data, length);
 
     // Send packet
-    WriteFile(handleCom, packet, PACKET_SIZE, &bitsLengthInChar, nullptr);
-    if (bitsLengthInChar != PACKET_SIZE) {
+    WriteFile(handleCom, packet, length, &bitsLengthInChar, nullptr);
+    if (bitsLengthInChar != length) {
         throw runtime_error("Failed to write data to serial port");
     }
 
@@ -196,7 +195,6 @@ void SerialPort::sendPacket(char *data, int length, int blockNumber, int additio
         WriteFile(handleCom, checksum, 1, &bitsLengthInChar, nullptr);
     }
 }
-
 
 void SerialPort::sendEOT() {
     WriteFile(handleCom, &EOT, 1, &bitsLengthInChar, nullptr);

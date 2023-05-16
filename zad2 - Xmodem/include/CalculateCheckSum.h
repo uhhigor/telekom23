@@ -6,8 +6,8 @@ using namespace std;
 
 class CalculateCheckSum {
 public:
-    uint16_t calculateCRC16(char *data, int length);
-    int calculateCheckSum(char *data, int length);
+    static uint16_t calculateCRC16(unsigned char *data, int length);
+    static int calculateCheckSum(unsigned char *data, int length);
 };
 
 

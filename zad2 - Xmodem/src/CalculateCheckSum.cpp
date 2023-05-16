@@ -1,6 +1,6 @@
 #include "CalculateCheckSum.h"
 
-uint16_t CalculateCheckSum::calculateCRC16(char *data, int length) {
+uint16_t CalculateCheckSum::calculateCRC16(unsigned char *data, int length) {
     uint16_t crc = 0;
     for (int i = 0; i < length; i++) {
         crc ^= ((uint16_t) data[i] << 8);
@@ -15,9 +15,9 @@ uint16_t CalculateCheckSum::calculateCRC16(char *data, int length) {
     return crc;
 }
 
-int CalculateCheckSum::calculateCheckSum(char *data, int length) {
+int CalculateCheckSum::calculateCheckSum(unsigned char *data, int length) {
     int algebraicCheckSum = 0;
-    char *ptr = data;
+    unsigned char *ptr = data;
 
     while(length) {
         algebraicCheckSum += (*ptr++);

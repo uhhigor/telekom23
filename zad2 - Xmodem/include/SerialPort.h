@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <fstream>
 #include <iostream>
+#include <vector>
 
 using namespace std;
 
@@ -15,7 +16,7 @@ public:
     explicit SerialPort(const string &chosenPort);
     void sendFile(const string &fileName, bool isCRCSupported);
     void receiveFile(const string& fileName, bool isCRCSupported);
-    void sendPacket(char data[], int length, int blockNumber, int additionalBlockLength);
+    void sendPacket(std::vector<uint8_t> &data, int length, size_t blockNumber, int additionalBlockLength);
     void sendEOT();
 };
 

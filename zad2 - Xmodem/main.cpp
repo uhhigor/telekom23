@@ -28,19 +28,19 @@ int main() {
     switch (mode) {
         case 1:
             CRC16 = false;
-            serialPort.sendFile(R"(C:\Users\Maciej\Repositories\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
+            serialPort.sendFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
             break;
         case 2:
             CRC16 = true;
-            serialPort.sendFile(R"(C:\Users\Maciej\Repositories\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
+            serialPort.sendFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
             break;
         case 3:
             CRC16 = false;
-            serialPort.receiveFile(R"(C:\Users\Maciej\Repositories\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
+            serialPort.receiveFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
             break;
         case 4:
             CRC16 = true;
-            serialPort.receiveFile(R"(C:\Users\Maciej\Repositories\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
+            serialPort.receiveFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
             break;
         default:
             break;

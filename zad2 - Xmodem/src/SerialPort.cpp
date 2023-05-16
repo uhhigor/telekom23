@@ -253,7 +253,7 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
         ReadFile(handleCom, header, 3, &bitsLengthInChar, nullptr);
         ReadFile(handleCom, data, PACKET_SIZE, &bitsLengthInChar, nullptr);
         ReadFile(handleCom, checkSum, additionalBlockLength, &bitsLengthInChar, nullptr);
-        if (header[0] == SOH && (int) header[3] == blockNumber && (int) header[2] == ~blockNumber) {
+        if (header[0] == SOH && (int) header[1] == blockNumber && (int) header[2] == ~blockNumber) {
             // Valid packet received
             memcpy(data, packet, PACKET_SIZE);
             CalculateCheckSum calculateCheckSum;

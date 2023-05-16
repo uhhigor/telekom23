@@ -201,6 +201,7 @@ void SerialPort::sendEOT() {
 }
 
 bool sohReceived = false;
+bool eofReceived = false;
 
 void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
     // Open file for writing
@@ -241,62 +242,61 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
         throw runtime_error("Timeout waiting for SOH response from sender");
     }
 
-// reszta do przerobienia
-
     // Receive file contents
     int blockNumber = 1;
-    bool eofReceived = false;
-    char data[PACKET_SIZE];
+    char data[PACKET_SIZE], header[3], checkSum[additionalBlockLength];
     while (!eofReceived) {
         // Receive packet
-        char packet[PACKET_SIZE + additionalBlockLength];
-        memset(packet, 0, PACKET_SIZE + additionalBlockLength);
-        auto startTime = chrono::system_clock::now();
-        while (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - startTime).count() < 1000) {
-            // Check if there is enough data available to read a packet
-            DWORD bytesAvailable = 0;
-            PeekNamedPipe(handleCom, nullptr, 0, nullptr, &bytesAvailable, nullptr);
-            ReadFile(handleCom, packet, PACKET_SIZE + additionalBlockLength, &bitsLengthInChar, nullptr);
-                if (bitsLengthInChar == PACKET_SIZE + additionalBlockLength && packet[0] == SOH && packet[1] == blockNumber && packet[2] == ~blockNumber) {
-                    // Valid packet received
-                    memcpy(data, packet + 3, PACKET_SIZE);
-                    CalculateCheckSum calculateCheckSum;
-                    char checksum;
-                    char crcChecksum[2];
-                    if (additionalBlockLength == 2) {
-                        uint16_t crc = calculateCheckSum.calculateCRC16(data, PACKET_SIZE);
-                        crcChecksum[0] = static_cast<char>((crc >> 8) & 0xFF);
-                        crcChecksum[1] = static_cast<char>(crc & 0xFF);
-                        if (crcChecksum[0] == packet[PACKET_SIZE + additionalBlockLength - 2]
-                            && crcChecksum[1] == packet[PACKET_SIZE + additionalBlockLength - 1]) {
-                            // Checksum is valid
-                            WriteFile(handleCom, packet + 3, PACKET_SIZE, &bitsLengthInChar, nullptr);
-                            blockNumber++;
-                            WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
-                        } else {
-                            // Checksum is invalid
-                            WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
-                        }
-                    } else {
-                        checksum = (char) calculateCheckSum.calculateCheckSum(data, PACKET_SIZE);
-                        if (checksum == packet[PACKET_SIZE + additionalBlockLength - 1]) {
-                            // Checksum is valid
-                            WriteFile(handleCom, packet + 3, PACKET_SIZE, &bitsLengthInChar, nullptr);
-                            blockNumber++;
-                            WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
-                        } else {
-                            // Checksum is invalid
-                            WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
-                        }
-                    }
-                } else if (bitsLengthInChar == 1 && packet[0] == EOT) {
-                    // End of file received
-                    eofReceived = true;
-                    break;
+        char packet[PACKET_SIZE];
+        // Check if there is enough data available to read a packet
+        //PeekNamedPipe(handleCom, nullptr, 0, nullptr, &bytesAvailable, nullptr);
+        ReadFile(handleCom, header, 3, &bitsLengthInChar, nullptr);
+        ReadFile(handleCom, data, PACKET_SIZE, &bitsLengthInChar, nullptr);
+        ReadFile(handleCom, checkSum, additionalBlockLength, &bitsLengthInChar, nullptr);
+        if (header[0] == SOH && (int) header[3] == blockNumber && (int) header[2] == ~blockNumber) {
+            // Valid packet received
+            memcpy(data, packet, PACKET_SIZE);
+            CalculateCheckSum calculateCheckSum;
+            char checksum;
+            char crcChecksum[2];
+            cout<<"\nChecking checksum";
+            if (additionalBlockLength == 2) {
+                uint16_t crc = calculateCheckSum.calculateCRC16(data, PACKET_SIZE);
+                crcChecksum[0] = static_cast<char>((crc >> 8) & 0xFF);
+                crcChecksum[1] = static_cast<char>(crc & 0xFF);
+                if (crcChecksum[0] == checkSum[0]
+                    && crcChecksum[1] == checkSum[1]) {
+                    // Checksum is valid
+                    //WriteFile(handleCom, packet + 3, PACKET_SIZE, &bitsLengthInChar, nullptr);
+                    blockNumber++;
+                    cout<<"\nChecksum is valid";
+                    WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
                 } else {
-                    // Invalid packet received
+                    // Checksum is invalid
+                    cout<<"\nChecksum is invalid";
                     WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
                 }
+            } else {
+                checksum = (char) calculateCheckSum.calculateCheckSum(data, PACKET_SIZE);
+                if (checksum == checkSum[0]) {
+                    // Checksum is valid
+                    //WriteFile(handleCom, packet + 3, PACKET_SIZE, &bitsLengthInChar, nullptr);
+                    blockNumber++;
+                    cout<<"\nChecksum is valid";
+                    WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
+                } else {
+                    // Checksum is invalid
+                    cout<<"\nChecksum is invalid";
+                    WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
+                }
+            }
+        } else if (bitsLengthInChar == 1 && packet[0] == EOT) {
+            // End of file received
+            eofReceived = true;
+            break;
+        } else {
+            // Invalid packet received
+            WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
         }
         if (bitsLengthInChar == 0) {
             // Timeout waiting for packet

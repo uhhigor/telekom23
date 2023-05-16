@@ -63,7 +63,7 @@ bool nakReceived = false;
 
 void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
     ifstream file;
-    file.open(fileName, ios::in | ios::binary );
+    file.open(fileName, ios::in | ios::binary);
     if (file.is_open()) {
         cout << "\nFile opened successfully";
         if (file.peek() == ifstream::traits_type::eof()) {
@@ -200,25 +200,48 @@ void SerialPort::sendEOT() {
     WriteFile(handleCom, &EOT, 1, &bitsLengthInChar, nullptr);
 }
 
+bool sohReceived = false;
+
 void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
     // Open file for writing
-    ofstream file(fileName, ios::in | ios::out | ios::binary);;
+    ofstream file(fileName, ios::out | ios::binary);;
     if (file.is_open()) {
-        cout<<"\nFile opened successfully";
+        cout << "\nFile opened successfully";
     } else {
-        throw runtime_error("Failed to open file: " + fileName);
+        throw runtime_error("\nFailed to open file: " + fileName);
     }
 
     int additionalBlockLength;
+    char pom, type;
 
+    cout<<"\nWaiting for SOH";
     if(isCRCSupported){
-        WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
-        additionalBlockLength = 5;
+        type = C;
+        additionalBlockLength = 2;
     } else {
-        // Send NAK to sender
-        WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
-        additionalBlockLength = 4;
+        // algebraic checksum
+        type= NAK;
+        additionalBlockLength = 1;
     }
+
+    for (int i = 0; i < 2; i++) {
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+        WriteFile(handleCom, &type, 1, &bitsLengthInChar, nullptr);
+    }
+
+    while (true) {
+        ReadFile(handleCom, &pom, 1, &bitsLengthInChar, nullptr);
+        if(pom == SOH) {
+            cout << "\nConnection has been established";
+            sohReceived = true;
+            break;
+        }
+    }
+    if (!sohReceived) {
+        throw runtime_error("Timeout waiting for SOH response from sender");
+    }
+
+// reszta do przerobienia
 
     // Receive file contents
     int blockNumber = 1;
@@ -240,7 +263,7 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
                     CalculateCheckSum calculateCheckSum;
                     char checksum;
                     char crcChecksum[2];
-                    if (additionalBlockLength == 5) {
+                    if (additionalBlockLength == 2) {
                         uint16_t crc = calculateCheckSum.calculateCRC16(data, PACKET_SIZE);
                         crcChecksum[0] = static_cast<char>((crc >> 8) & 0xFF);
                         crcChecksum[1] = static_cast<char>(crc & 0xFF);

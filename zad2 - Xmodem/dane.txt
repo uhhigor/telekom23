@@ -1,34 +1,4 @@
-cos jest a czegos nie ma
-abc
-abc
-abc
-Ala ma kotacos jest a czegos nie ma
-           abc
-           abc
-           abc
-           Ala ma kotacos jest a czegos nie ma
-                      abc
-                      abc
-                      abc
-                      Ala ma kotacos jest a czegos nie ma
-                                 abc
-                                 abc
-                                 abc
-                                 Ala ma kotacos jest a czegos nie ma
-                                            abc
-                                            abc
-                                            abc
-                                            Ala ma kotacos jest a czegos nie ma
-                                                       abc
-                                                       abc
-                                                       abc
-                                                       Ala ma kotacos jest a czegos nie ma
-                                                                  abc
-                                                                  abc
-                                                                  abc
-                                                                  Ala ma kotacos jest a czegos nie ma
-                                                                             abc
-                                                                             abc
-                                                                             abc
-                                                                             Ala ma kota
-
+ala ma kota ala ma kota
+ala ma kota ala ma kota ala ma kota ala ma kota
+ala ma kota ala ma kota ala ma kota ala ma kota ala ma kota ala ma kota
+ala ma kota ala ma kota ala ma kota ala ma kota ala ma kota ala ma kota ala ma kota ala ma kota

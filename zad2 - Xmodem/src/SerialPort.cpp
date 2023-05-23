@@ -59,10 +59,9 @@ SerialPort::SerialPort(const string& chosenPort)
 }
 
 unsigned long bitsLengthInChar;
-bool isPacket;
 bool nakReceived = false;
 
-void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
+void SerialPort::sendFile(const string &fileName) {
     ifstream file;
     file.open(fileName, ios::in | ios::binary);
     if (file.is_open()) {
@@ -82,6 +81,7 @@ void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
         if (bitsLengthInChar > 0) {
             if (type == NAK || type == C) {
                 cout << "\nConnection has been established";
+                cout<<"\nTransmission mode: "<<(int) type<<"\n";
                 nakReceived = true;
                 break;
             } else if (!nakReceived) {
@@ -93,23 +93,22 @@ void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
     int additionalBlockLength;
     if (type == C)
         additionalBlockLength = 2;
-    else
+    else if (type == NAK)
         additionalBlockLength = 1;
-
-    isPacket = false;
+    else throw runtime_error("Error reading transmission type");
 
     // Send file contents
     size_t previousBlockNumber;
     size_t blockNumber = 1;
-    std::vector<uint8_t> data(PACKET_SIZE);
+    uint8_t data[PACKET_SIZE];
+    std::fill(std::begin(data), std::end(data), SUB);
     while (true) {
         if(blockNumber != previousBlockNumber) {
-            file.read(reinterpret_cast<char *>(data.data()), PACKET_SIZE);
+            std::fill(std::begin(data), std::end(data), SUB);
+            file.read(reinterpret_cast<char *>(data), PACKET_SIZE);
             std::streamsize bytesRead = file.gcount();
-            if (bytesRead == 0) {
-                // End of file reached, break the loop
+            if (bytesRead == 0)
                 break;
-            }
         }
 
         sendPacket(data,PACKET_SIZE, blockNumber, additionalBlockLength);
@@ -122,7 +121,6 @@ void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
             if (bitsLengthInChar > 0) {
                 if (pom == ACK) {
                     cout << "\nACK\n";
-                    isPacket = true;
                     previousBlockNumber = blockNumber;
                     blockNumber++;
                     break;
@@ -154,23 +152,25 @@ void SerialPort::sendFile(const string &fileName, bool isCRCSupported) {
     CloseHandle(handleCom);
 }
 
-void SerialPort::sendPacket(std::vector<uint8_t> &data, int length, size_t blockNumber, int additionalBlockLength) {
-    cout << "\nSending " << blockNumber << " packet";
+void SerialPort::sendPacket(uint8_t *data, int length, size_t blockNumber, int additionalBlockLength) {
+    cout << "\nSending packet " << blockNumber;
     uint8_t packet[PACKET_SIZE + 3 + additionalBlockLength];
-    packet[0] = SOH;
+    if(additionalBlockLength == 2)
+        packet[0] = C;
+    else packet[0] = SOH;
     packet[1] = static_cast<uint8_t>(blockNumber);
     packet[2] = static_cast<uint8_t>(~blockNumber);
 
-    memcpy(&packet[3], data.data(), PACKET_SIZE);
+    memcpy(&packet[3], data, PACKET_SIZE);
 
     uint8_t checksum[additionalBlockLength];
 
     if (additionalBlockLength == 2) {
-        uint16_t crc = CalculateCheckSum::calculateCRC16(data.data(), length);
+        uint16_t crc = CalculateCheckSum::calculateCRC16(data, length);
         checksum[0] = static_cast<char>((crc >> 8) & 0xFF);
         checksum[1] = static_cast<char>(crc & 0xFF);
     } else {
-        uint8_t checkSum = CalculateCheckSum::calculateCheckSum(data.data(), length);
+        uint8_t checkSum = CalculateCheckSum::calculateCheckSum(data, length);
         checksum[0] = checkSum;
     }
 
@@ -185,6 +185,7 @@ void SerialPort::sendPacket(std::vector<uint8_t> &data, int length, size_t block
 }
 
 void SerialPort::sendEOT() {
+    cout<<"\nSENDING EOT\n";
     WriteFile(handleCom, &EOT, 1, &bitsLengthInChar, nullptr);
 }
 
@@ -227,7 +228,7 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
     while (!eofReceived) {
         cout<<"\nWaiting\n";
         if(!first) {
-            std::fill(received, received + sizeof received, 0);
+            std::fill(received, received + sizeof received, SUB);
             ReadFile(handleCom, &received, messageLen, &bitsLengthInChar, nullptr);
         }
         first = false;
@@ -235,14 +236,9 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
         if(received[0] == SOH || received[0] == C) {
             cout << "\nReceiving packet "<<blockNumber<<"\n";
 
-            if(received[0] == SOH)
-                additionalBlockLength = 1;
-            else if(received[0] == C)
-                additionalBlockLength = 2;
-
-            cout << "0: " << (int) received[0] << "\n";
-            cout << "1: " <<(int) received[1] << " == " << blockNumber <<"\n";
-            cout << "2: " << (int)received[2]  << " == " << 255-blockNumber <<"\n";
+            cout << "HEADER 0: " << (int) received[0] << "\n";
+            cout << "HEADER 1: " <<(int) received[1] << " == " << blockNumber <<"\n";
+            cout << "HEADER 2: " << (int)received[2]  << " == " << 255-blockNumber <<"\n";
 
             if(received[1] == blockNumber && received[2] == 255-blockNumber) {
                 cout << "Valid packet\n";
@@ -253,40 +249,68 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
                 memcpy(&data, &received[3], PACKET_SIZE);
                 memcpy(&checkSumReceived, &received[sizeof received - additionalBlockLength], additionalBlockLength);
 
-                cout << "DATA: " << data <<"\n";
+                /*cout << "DATA: " << data <<"\n";
+                for(unsigned char i : data)
+                    cout<< (int) i<<" ";
+                cout<<"\n";*/
 
                 if (additionalBlockLength == 2) {
                     cout << "CRC\n";
-                    cout << "CHECKSUM 0: " << (int) checkSumReceived[0];
-                    cout << "CHECKSUM 1: " << (int) checkSumReceived[1];
-                    char crcChecksum[2];
+
+                    uint8_t crcChecksum[2];
                     uint16_t crc = CalculateCheckSum::calculateCRC16(data, PACKET_SIZE);
-                    crcChecksum[0] = static_cast<char>((crc >> 8) & 0xFF);
-                    crcChecksum[1] = static_cast<char>(crc & 0xFF);
+                    crcChecksum[0] = uint8_t((crc >> 8) & 0xFF);
+                    crcChecksum[1] = uint8_t(crc & 0xFF);
+
+                    cout << "CHECKSUM 0: " << (int) checkSumReceived[0] << " == " << (int)crcChecksum[0];
+                    cout << "\nCHECKSUM 1: " << (int) checkSumReceived[1] << " == " << (int)crcChecksum[1];
                     if (crcChecksum[0] == checkSumReceived[0]
                     && crcChecksum[1] == checkSumReceived[1]) {
                         blockNumber++;
                         cout<<"\nChecksum is valid";
                         WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
+
+                        //remove padding
+                        int lastIndex = PACKET_SIZE - 1;
+                        while (lastIndex >= 0 && data[lastIndex] == SUB)
+                            lastIndex--;
+
+                        int charArraySize = lastIndex + 1;
+
+                        char charArray[charArraySize];
+                        memcpy(charArray, data, charArraySize);
+                        charArray[charArraySize] = '\0';
+
+                        file.write(charArray, charArraySize);
                     } else {
                         cout<<"\nChecksum is invalid";
                         WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
                     }
                 } else {
-
                     uint8_t checkSum;
                     cout << "CHECKSUM\n";
                     checkSum = CalculateCheckSum::calculateCheckSum(data, sizeof data);
 
-                    cout << "CHECKSUM 0: " << (int)checkSumReceived[0] << " == " << (int)checkSum;
+                    cout << "CHECKSUM 0: " << (int) checkSumReceived[0] << " == " << (int) checkSum;
                     if (checkSum == checkSumReceived[0]) {
                         blockNumber++;
-                        cout<<"\nChecksum is valid";
+                        cout << "\nChecksum is valid";
                         WriteFile(handleCom, &ACK, 1, &bitsLengthInChar, nullptr);
 
-                        file.write(reinterpret_cast<const char *>(data), sizeof data);
+                        //remove padding
+                        int lastIndex = PACKET_SIZE - 1;
+                        while (lastIndex >= 0 && data[lastIndex] == SUB)
+                            lastIndex--;
+
+                        int charArraySize = lastIndex + 1;
+
+                        char charArray[charArraySize];
+                        memcpy(charArray, data, charArraySize);
+                        charArray[charArraySize] = '\0';
+
+                        file.write(charArray, charArraySize);
                     } else {
-                        cout<<"\nChecksum is invalid";
+                        cout << "\nChecksum is invalid";
                         WriteFile(handleCom, &NAK, 1, &bitsLengthInChar, nullptr);
                     }
                 }
@@ -297,7 +321,7 @@ void SerialPort::receiveFile(const string &fileName, bool isCRCSupported) {
             }
         } else if (received[0] == EOT) {
             eofReceived = true;
-            cout<<"\nEND OF TRANSMISSION\n";
+            cout<<"==========\nEND OF TRANSMISSION\n==========";
         }
         else throw runtime_error("Error");
     }

@@ -14,9 +14,9 @@ private:
     HANDLE handleCom;
 public:
     explicit SerialPort(const string &chosenPort);
-    void sendFile(const string &fileName, bool isCRCSupported);
+    void sendFile(const string &fileName);
     void receiveFile(const string& fileName, bool isCRCSupported);
-    void sendPacket(std::vector<uint8_t> &data, int length, size_t blockNumber, int additionalBlockLength);
+    void sendPacket(uint8_t *data, int length, size_t blockNumber, int additionalBlockLength);
     void sendEOT();
 };
 

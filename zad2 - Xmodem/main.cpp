@@ -15,32 +15,23 @@ int main() {
 
     cout<<"\nSelect the operating mode: ";
     int mode;
-    cout<<"\n1. Sender, algebraic checksum";
-    cout<<"\n2. Sender, CRC16 checksum";
-    cout<<"\n3. Receiver, algebraic checksum";
-    cout<<"\n4. Receiver, CRC16 checksum";
+    cout<<"\n1. Sender";
+    cout<<"\n2. Receiver (algebraic)";
+    cout<<"\n3. Receiver (CR16)";
     cout<<"\nChoice: ";
     cin>>mode;
     cout<<"Chosen mode: " + to_string(mode);
 
-    bool CRC16;
     SerialPort serialPort(chosenPort);
     switch (mode) {
         case 1:
-            CRC16 = false;
-            serialPort.sendFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
+            serialPort.sendFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName);
             break;
         case 2:
-            CRC16 = true;
-            serialPort.sendFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
+            serialPort.receiveFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, false);
             break;
         case 3:
-            CRC16 = false;
-            serialPort.receiveFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
-            break;
-        case 4:
-            CRC16 = true;
-            serialPort.receiveFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, CRC16);
+            serialPort.receiveFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, true);
             break;
         default:
             break;

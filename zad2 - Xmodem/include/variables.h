@@ -7,6 +7,7 @@ const char EOT = 0x04; // End Of Transmission
 const char ACK = 0x06; // Acknowledge
 const char NAK = 0x15; // Negative Acknowledge
 const char C = 0x43; // CRC16 checksum
+const char SUB = 0x1A; // Substitute
 
 // XModem packet size
 const int PACKET_SIZE = 128;

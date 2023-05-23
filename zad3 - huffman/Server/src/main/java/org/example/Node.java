@@ -7,4 +7,3 @@ public class Node implements Serializable {
     int frequency;
     Node left, right;
 }
-

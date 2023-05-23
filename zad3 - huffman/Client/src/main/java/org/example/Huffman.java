@@ -6,10 +6,9 @@ import java.util.PriorityQueue;
 
 public class Huffman {
 
-    public String createHuffmanTree(char [] charArray) {
-
+    public Node createHuffmanTree(char [] charArray) {
         if(charArray.length == 0)
-            return "";
+            return null;
 
         //sign frequency
         Map<Character, Integer> freq = new HashMap<>();
@@ -53,6 +52,11 @@ public class Huffman {
             root = newNode;
             queue.add(newNode);
         }
+        return root;
+    }
+
+    public String huffmanTree(char [] charArray) {
+        Node root = createHuffmanTree(charArray);
         //store encoded sign pattern
         Map<Character, String> encodedData = new HashMap<>();
         System.out.println("Code directory: ");
@@ -63,10 +67,9 @@ public class Huffman {
             stringBuilder.append(encodedData.get(c));
         }
         System.out.println("Encoded message: " + stringBuilder);
-        System.out.println("Decoded message: " + decodeData(root, stringBuilder.toString()));
-
-        return  stringBuilder.toString();
+        return stringBuilder.toString();
     }
+
     public void encodeData(Node root, String code, Map<Character, String> encodedData) {
         if (root.left == null && root.right == null) {
             encodedData.put(root.character, code.length() > 0 ? code : "1");
@@ -80,27 +83,5 @@ public class Huffman {
         encodeData(root.left, code + "0", encodedData);
         encodeData(root.right, code + "1", encodedData);
     }
-
-    public String decodeData(Node root, String encodedData) {
-        StringBuilder decodedString = new StringBuilder();
-        Node currentNode = root;
-
-        for (int i = 0; i < encodedData.length(); i++) {
-            char bit = encodedData.charAt(i);
-
-            if (bit == '0') {
-                currentNode = currentNode.left;
-            } else if (bit == '1') {
-                currentNode = currentNode.right;
-            }
-
-            if (currentNode.left == null && currentNode.right == null) {
-                decodedString.append(currentNode.character);
-                currentNode = root;
-            }
-        }
-        return decodedString.toString();
-    }
-
 }
 

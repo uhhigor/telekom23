@@ -8,10 +8,10 @@ public class Main {
     public static void main(String[] args) throws IOException {
         Scanner scanner = new Scanner(System.in);
 
-        System.out.println("Enter port number: ");
+        System.out.print("Enter port number: ");
         int portNumber = scanner.nextInt();
 
-        System.out.println("Enter file name: ");
+        System.out.print("Enter file name: ");
         String fileName = scanner.next();
 
         File file = new File(fileName);

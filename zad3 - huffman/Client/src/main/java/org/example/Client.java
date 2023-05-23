@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 public class Client {
     private DataOutputStream dataOutputStream;
     private DataInputStream dataInputStream;
+    private ObjectOutputStream objectOutputStream;
     private Socket socket;
 
     public void startConnection(int portNumber, String nameFile) throws IOException {
@@ -32,7 +33,12 @@ public class Client {
                     i++;
                 }
                 Huffman huffman = new Huffman();
-                dataOutputStream.writeUTF(String.valueOf(huffman.createHuffmanTree(charArray)));
+                dataOutputStream.writeUTF(huffman.huffmanTree(charArray));
+
+                Node root = huffman.createHuffmanTree(charArray);
+                objectOutputStream = new ObjectOutputStream(socket.getOutputStream());
+                objectOutputStream.writeObject(root);
+                objectOutputStream.flush();
             }
         } catch (FileNotFoundException e) {
             System.out.println("Can't open the file");
@@ -44,6 +50,7 @@ public class Client {
     public void stopConnection() throws IOException {
         dataInputStream.close();
         dataOutputStream.close();
+        objectOutputStream.close();
         socket.close();
     }
 }

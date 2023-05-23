@@ -2,6 +2,10 @@ package org.example;
 
 import java.io.*;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
 
 public class Client {
@@ -17,18 +21,27 @@ public class Client {
         stopConnection();
     }
 
-    public void readFile(String nameFile)  {
+    public void readFile(String nameFile) {
         try {
             File file = new File(nameFile);
-            Scanner scanner = new Scanner(file);
-            while(scanner.hasNextLine()) {
-                String data = scanner.nextLine();
-                dataOutputStream.writeUTF(data);
+            String str = new String(Files.readAllBytes(Paths.get(nameFile)));
+            int len = str.length();
+            try (FileReader fileReader = new FileReader(file)) {
+                int character, i = 0;
+                char [] charArray = new char[len];
+                while ((character = fileReader.read()) != -1) {
+                    char c = (char) character;
+                    charArray[i] = c;
+                    dataOutputStream.writeUTF(String.valueOf(c));
+                    i++;
+                }
+                Huffman huffman = new Huffman();
+                huffman.createHuffmanTree(charArray);
             }
         } catch (FileNotFoundException e) {
             System.out.println("Can't open the file");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        }catch (IOException e) {
+            e.printStackTrace();
         }
     }
 

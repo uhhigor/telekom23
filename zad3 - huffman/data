@@ -1,6 +1,4 @@
-cos cos
-ala ma kota
-A
-B
-C
-D
+Dla podanego tekstu należy opracować słownik kodowy, umieć uzasadnić jego zawartość.
+Kolejnym zadaniem jest zbudowanie programów, które kodują plik tekstowy i przesyła go za pomocą
+metody gniazd sieciowych (socked) na inny komputer, na którym jest zaimplementowany drugi
+progam, którego zadaniem jest odebranie, odkodowanie i zapisanie go na dysku.

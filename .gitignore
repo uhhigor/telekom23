@@ -7,7 +7,10 @@ target/
 /zad2 - Xmodem/cmake-build-debug
 /zad1 - korekcja transmisji/target
 /zad3 - huffman/.idea
-/zad3 - huffman/target
+/zad3 - huffman/Client/.idea
+/zad3 - huffman/Client/target
+/zad3 - huffman/Server/.idea
+/zad3 - huffman/Server/target
 /.idea
 
 ### IntelliJ IDEA ###

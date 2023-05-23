@@ -1,17 +1,15 @@
 package org.example;
 
-import java.sql.SQLOutput;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.PriorityQueue;
 
 public class Huffman {
 
-    public void createHuffmanTree(char [] charArray) {
+    public String createHuffmanTree(char [] charArray) {
 
         if(charArray.length == 0)
-            return;
+            return "";
 
         //sign frequency
         Map<Character, Integer> freq = new HashMap<>();
@@ -66,6 +64,8 @@ public class Huffman {
         }
         System.out.println("Encoded message: " + stringBuilder);
         System.out.println("Decoded message: " + decodeData(root, stringBuilder.toString()));
+
+        return  stringBuilder.toString();
     }
     public void encodeData(Node root, String code, Map<Character, String> encodedData) {
         if (root.left == null && root.right == null) {

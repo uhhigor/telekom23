@@ -60,10 +60,11 @@ SerialPort::SerialPort(const string& chosenPort)
 
 unsigned long bitsLengthInChar;
 bool nakReceived = false;
+bool isPacket;
 
 void SerialPort::sendFile(const string &fileName) {
     ifstream file;
-    file.open(fileName, ios::in | ios::binary);
+    file.open(fileName, ios::in | ios::binary );
     if (file.is_open()) {
         cout << "\nFile opened successfully";
         if (file.peek() == ifstream::traits_type::eof()) {
@@ -75,13 +76,11 @@ void SerialPort::sendFile(const string &fileName) {
 
     // Wait for NAK from receive
     char type;
-
     while(true) {
         ReadFile(handleCom, &type, 1, &bitsLengthInChar, nullptr);
-        if (bitsLengthInChar > 0) {
+        if (bitsLengthInChar > 0) {   //Checks if there is anything to read
             if (type == NAK || type == C) {
                 cout << "\nConnection has been established";
-                cout<<"\nTransmission mode: "<<(int) type<<"\n";
                 nakReceived = true;
                 break;
             } else if (!nakReceived) {
@@ -90,48 +89,60 @@ void SerialPort::sendFile(const string &fileName) {
         }
     }
 
+    //Check transmission type CRC or not
     int additionalBlockLength;
-    if (type == C)
+    if (C == type)
         additionalBlockLength = 2;
-    else if (type == NAK)
+    else
         additionalBlockLength = 1;
-    else throw runtime_error("Error reading transmission type");
+
+    isPacket = false;
+    bool ackReceived = false;
+    bool nakReceivedAgain = false;
 
     // Send file contents
-    size_t previousBlockNumber;
-    size_t blockNumber = 1;
-    uint8_t data[PACKET_SIZE];
-    std::fill(std::begin(data), std::end(data), SUB);
+    int blockNumber = 1;
+    char packetData[PACKET_SIZE];
     while (true) {
-        if(blockNumber != previousBlockNumber) {
-            std::fill(std::begin(data), std::end(data), SUB);
-            file.read(reinterpret_cast<char *>(data), PACKET_SIZE);
-            std::streamsize bytesRead = file.gcount();
-            if (bytesRead == 0)
-                break;
+        fill_n(packetData, PACKET_SIZE, ' '); //Clear values
+        file.read(packetData, PACKET_SIZE);
+        int bytesRead = file.gcount();
+        if (bytesRead == 0) {
+            // End of file reached, break the loop
+            break;
         }
 
-        sendPacket(data,PACKET_SIZE, blockNumber, additionalBlockLength);
+        // Send packet
+        sendPacket(packetData,PACKET_SIZE, blockNumber, additionalBlockLength);
 
         // Wait for ACK or NAK response
         char pom;
         bitsLengthInChar = 0;
         while (true) {
-            ReadFile(handleCom, &pom, 1, &bitsLengthInChar, nullptr);
-            if (bitsLengthInChar > 0) {
+            if (ReadFile(handleCom, &pom, 1, &bitsLengthInChar, nullptr) && bitsLengthInChar > 0) {
                 if (pom == ACK) {
-                    cout << "\nACK\n";
-                    previousBlockNumber = blockNumber;
-                    blockNumber++;
+                    isPacket = true;
+                    ackReceived = true;
                     break;
                 } else if (pom == NAK) {
-                    cout << "\nNAK\n";
-                    previousBlockNumber = blockNumber;
+                    nakReceivedAgain = true;
                     break;
                 }
             }
+            if (!ackReceived) {
+                if (nakReceivedAgain) {
+                    // Resend packet
+                    blockNumber--;
+                } else {
+                    throw runtime_error("Timeout waiting for ACK/NAK response from receiver");
+                }
+            }
         }
+
+        // Increment block number
+        blockNumber++;
     }
+
     // Send EOT
     sendEOT();
 
@@ -152,40 +163,41 @@ void SerialPort::sendFile(const string &fileName) {
     CloseHandle(handleCom);
 }
 
-void SerialPort::sendPacket(uint8_t *data, int length, size_t blockNumber, int additionalBlockLength) {
-    cout << "\nSending packet " << blockNumber;
-    uint8_t packet[PACKET_SIZE + 3 + additionalBlockLength];
-    if(additionalBlockLength == 2)
-        packet[0] = C;
-    else packet[0] = SOH;
-    packet[1] = static_cast<uint8_t>(blockNumber);
-    packet[2] = static_cast<uint8_t>(~blockNumber);
+void SerialPort::sendPacket(char *data, int length, int blockNumber, int additionalBlockLength) {
+    cout<<"\nSending " << blockNumber << " packet";
+    char header[3];
+    char packet[PACKET_SIZE];
+    char checksum[additionalBlockLength];
 
-    memcpy(&packet[3], data, PACKET_SIZE);
+    // Construct packet header and copy data
+    header[0] = SOH; // Start of Header
+    header[1] = (char) blockNumber;
+    header[2] = (char) ~blockNumber;
+    WriteFile(handleCom, header, 3, &bitsLengthInChar, nullptr);
+    memcpy(packet, data, length);
 
-    uint8_t checksum[additionalBlockLength];
-
-    if (additionalBlockLength == 2) {
-        uint16_t crc = CalculateCheckSum::calculateCRC16(data, length);
-        checksum[0] = static_cast<char>((crc >> 8) & 0xFF);
-        checksum[1] = static_cast<char>(crc & 0xFF);
-    } else {
-        uint8_t checkSum = CalculateCheckSum::calculateCheckSum(data, length);
-        checksum[0] = checkSum;
+    // Send packet
+    WriteFile(handleCom, packet, length, &bitsLengthInChar, nullptr);
+    if (bitsLengthInChar != length) {
+        throw runtime_error("Failed to write data to serial port");
     }
 
-    memcpy(&packet[3+PACKET_SIZE], checksum, sizeof checksum);
+    // Calculate checksum
+    CalculateCheckSum calculateCheckSum;
 
-    WriteFile(handleCom, packet, sizeof packet, &bitsLengthInChar, nullptr);
-
-
-    if (bitsLengthInChar != sizeof packet) {
-        throw runtime_error("Failed to write data to serial port");
+    if (additionalBlockLength == 2) {
+        uint16_t crc = calculateCheckSum.calculateCRC16s(data, length);
+        checksum[0] = static_cast<char>((crc >> 8) & 0xFF);
+        checksum[1] = static_cast<char>(crc & 0xFF);
+        WriteFile(handleCom, checksum, 2, &bitsLengthInChar, nullptr);
+    } else {
+        char checkSum = (char) calculateCheckSum.calculateCheckSums(data, length);
+        checksum[0] = checkSum;
+        WriteFile(handleCom, checksum, 1, &bitsLengthInChar, nullptr);
     }
 }
 
 void SerialPort::sendEOT() {
-    cout<<"\nSENDING EOT\n";
     WriteFile(handleCom, &EOT, 1, &bitsLengthInChar, nullptr);
 }
 

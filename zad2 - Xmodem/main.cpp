@@ -25,13 +25,13 @@ int main() {
     SerialPort serialPort(chosenPort);
     switch (mode) {
         case 1:
-            serialPort.sendFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName);
+            serialPort.sendFile(R"(C:\Users\Maciej\Repositories\telekom23\zad2 - Xmodem\)" + fileName);
             break;
         case 2:
-            serialPort.receiveFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, false);
+            serialPort.receiveFile(R"(C:\Users\Maciej\Repositories\telekom23\zad2 - Xmodem\)" + fileName, false);
             break;
         case 3:
-            serialPort.receiveFile(R"(C:\Users\pixel\CLionProjects\telekom23\zad2 - Xmodem\)" + fileName, true);
+            serialPort.receiveFile(R"(C:\Users\Maciej\Repositories\telekom23\zad2 - Xmodem\)" + fileName, true);
             break;
         default:
             break;

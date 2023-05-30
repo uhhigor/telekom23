@@ -8,6 +8,9 @@ class CalculateCheckSum {
 public:
     static uint16_t calculateCRC16(unsigned char *data, int length);
     static int calculateCheckSum(unsigned char *data, int length);
+    int calculateCheckSums(char *data, int length);
+    static uint16_t calculateCRC16s(char *data, int length);
+
 };
 
 
